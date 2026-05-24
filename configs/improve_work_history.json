@@ -1,0 +1,15 @@
+{
+  "task_name": "improve_work_history",
+  "task_description": "Paraphrase the following resume bullet for work history into 3 concise and diverse sentences with matching tense, suitable as resume points.",
+  "output_spec": "{\"ImprovedTTC\": [\"sentence1\", \"sentence2\", \"sentence3\"]} — Each sentence must be between 8 to 13 words long. Always end with a period. Do not use articles, personal pronouns, or the word 'or'. Do not repeat the input in any output.",
+  "output_is_json": true,
+  "num_runs": 3,
+  "pass_threshold": 4.0,
+  "max_iterations": 3,
+  "j1_model": "gpt-4o-mini",
+  "j1_params": {"temperature": 0.3, "max_tokens": 1000},
+  "j2_model": "gpt-4o-mini",
+  "j2_params": {"temperature": 0.2, "max_tokens": 1500},
+  "boss_model": "gpt-4o",
+  "boss_params": {"temperature": 0.3, "max_tokens": 800}
+}

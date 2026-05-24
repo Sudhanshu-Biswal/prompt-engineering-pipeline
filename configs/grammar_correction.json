@@ -1,0 +1,15 @@
+{
+  "task_name": "grammar_correction",
+  "task_description": "Correct spelling, grammar, and punctuation errors in the given resume line. Make minimal changes — do not rephrase or rewrite beyond the necessary fix.",
+  "output_spec": "Return JSON: {\"issues\": [{\"sentence\": \"\", \"corrected_sentence\": \"\", \"errors\": {\"spelling\": [], \"grammar\": [], \"punctuation\": []}}]}. If no errors found return {\"issues\": []}.",
+  "output_is_json": true,
+  "num_runs": 3,
+  "pass_threshold": 4.0,
+  "max_iterations": 3,
+  "j1_model": "gpt-4o-mini",
+  "j1_params": {"temperature": 0.0, "max_tokens": 1000},
+  "j2_model": "gpt-4o-mini",
+  "j2_params": {"temperature": 0.2, "max_tokens": 1500},
+  "boss_model": "gpt-4o",
+  "boss_params": {"temperature": 0.0, "max_tokens": 800}
+}
