@@ -10,3 +10,5 @@ numpy>=1.26.0
 scipy>=1.13.0
 pandas>=2.0.0
 openpyxl>=3.1.0
+chromadb>=0.5.0
+sentence-transformers>=2.7.0

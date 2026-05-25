@@ -1,8 +1,12 @@
 # Automated Prompt Engineering Pipeline
 
-> **APG + APO** — Auto Prompt Generation and Optimization using a multi-agent LangGraph system with a 3-judge evaluation framework and statistical hypothesis testing.
+> **APG + APO** — Auto Prompt Generation and Optimization using a
+> LangGraph workflow with a tool-using APO agent, 3-judge evaluation
+> framework, and statistical hypothesis testing.
 
-Built as a production-grade public implementation of the prompt engineering automation system developed at [BOLD](https://www.bold.com/) — reducing manual prompt engineering cycles from **3 days to under 1 hour**.
+Built as a production-grade public implementation of the prompt engineering
+automation system developed at [BOLD](https://www.bold.com/) — reducing
+manual prompt engineering cycles from **3 days to under 1 hour**.
 
 ---
 
@@ -14,14 +18,14 @@ Prompt engineering for new LLM tasks was a slow, manual, 3-day cycle:
 Write prompt → test manually → review failures → rewrite → repeat
 ```
 
-There was no systematic evaluation, no statistical validation, and no way
-to prove the new prompt was actually better than the baseline.
+No systematic evaluation. No statistical validation. No way to prove
+the new prompt was actually better than the baseline.
 
 ---
 
 ## The Solution
 
-A fully automated agentic pipeline:
+A fully automated pipeline with a tool-using APO agent at its core:
 
 ```
 Task description + output spec
@@ -36,19 +40,22 @@ Task description + output spec
           │
           ▼
    3-Judge Evaluation
-   ┌──────────────────────────────────────┐
-   │  J1 — Structural Judge (gpt-4o-mini) │
-   │  J2 — Qualitative Judge (gpt-4o-mini)│
-   │  Boss — Synthesiser (gpt-4o)         │
-   └──────────────────────────────────────┘
+   ┌──────────────────────────────────────────┐
+   │  J1 — Structural Judge  (gpt-5.4-nano)   │
+   │  J2 — Qualitative Judge (gpt-5.4-nano)   │
+   │  Boss — Synthesiser     (gpt-5.4-mini)   │
+   └──────────────────────────────────────────┘
           │
      Pass / Fail
           │
     ┌─────┴──────┐
   PASS          FAIL
     │              │
-Human          APO — Auto Prompt Optimizer
-Approval       (analyses failures → generates v2)
+Human          APO Agent — Tool-using Auto Prompt Optimizer
+Approval       │
+    │          ├── search_prompt_history (ChromaDB)
+    │          ├── get_rubric_failures (structured data)
+    │          └── generates optimised prompt v{n+1}
     │              │
     │         loops back (max 3 iterations)
     │
@@ -76,9 +83,11 @@ Baseline: GPT-4o-mini with a plain unoptimised prompt.
 | DSPy BootstrapFewShot | 3.1/5 | no difference | Standard optimizer |
 | **APG + APO (this system)** | **4.3/5** | **better** | Custom pipeline |
 
-> DSPy optimises prompt *selection*. APG/APO optimises prompt *construction* —
-> a fundamentally different approach that outperforms DSPy on
-> structured writing-help tasks.
+> DSPy optimises prompt *selection* — picking the best few-shot examples
+> for a fixed template. APG/APO optimises prompt *construction* —
+> generating and iteratively improving the full prompt structure.
+> Fundamentally different approaches. APG/APO wins on structured
+> writing-help tasks.
 
 ---
 
@@ -86,7 +95,12 @@ Baseline: GPT-4o-mini with a plain unoptimised prompt.
 
 ```
 v1  3.21/5  ████████████         ✗ failed
-v2  3.84/5  ███████████████      ✗ failed  
+             APO agent: called get_rubric_failures
+                        called search_prompt_history (2 results)
+             
+v2  3.84/5  ███████████████      ✗ failed
+             APO agent: called get_rubric_failures
+             
 v3  4.31/5  █████████████████    ✓ PASSED
 
 Statistical test : Wilcoxon signed-rank
@@ -100,13 +114,13 @@ Migration        : APPROVED
 
 ## Architecture
 
-### Agent graph (LangGraph)
+### LangGraph workflow
 
 ```
 START → APG → Baseline → TestRunner → Evaluator → Router
                               ↑                       │
                               │            ┌──────────┼──────────┐
-                              │           APO    HumanApproval  Hypothesis
+                              │         APO Agent  HumanApproval  Hypothesis
                               │            │          │              │
                               └────────────┘     APO/Hypo          END
 ```
@@ -115,65 +129,148 @@ START → APG → Baseline → TestRunner → Evaluator → Router
 
 | Node | Model | Job |
 |---|---|---|
-| APG | gpt-4o-mini | Generate prompt v1 from task description + output spec |
-| Baseline | gpt-4o-mini | Generate source outputs using plain prompt (output_a) |
-| TestRunner | gpt-4o-mini | Run current prompt on all test cases (output_b) |
-| J1 | gpt-4o-mini | Structural evaluation — format, length, constraints |
-| J2 | gpt-4o-mini | Qualitative evaluation — tone, clarity, naturalness |
-| Boss | **gpt-4o** | Synthesise J1+J2, produce final float score |
+| APG | gpt-5.4-nano | Generate prompt v1 from task description + output spec |
+| Baseline | gpt-5.4-nano | Generate source outputs using plain prompt (output_a) |
+| TestRunner | gpt-5.4-nano | Run current prompt on all test cases (output_b) |
+| J1 | gpt-5.4-nano | Structural evaluation — format, length, constraints |
+| J2 | gpt-5.4-nano | Qualitative evaluation — tone, clarity, naturalness |
+| Boss | **gpt-5.4-mini** | Synthesise J1+J2, produce final float score |
 | Router | — | Conditional edge: pass→human, fail→APO, max→hypothesis |
-| APO | **gpt-4o** | Analyse failures, generate improved prompt |
+| **APO Agent** | **gpt-5.4-mini** | Tool-using agent — retrieves context, optimises prompt |
 | HumanApproval | — | Checkpoint: approve / reject / provide feedback |
 | Hypothesis | — | Wilcoxon or permutation test, migration decision |
 
-**Model routing rationale:** gpt-4o-mini for generation and scoring (fast, cheap).
-gpt-4o only for APO and Boss — the two nodes requiring deep reasoning.
-This reduces cost by ~70% vs running gpt-4o everywhere.
+**Model routing rationale:** gpt-5.4-nano for generation and scoring
+(fast, cheap — $0.20/$1.25 per 1M tokens). gpt-5.4-mini only for APO
+Agent and Boss — the two nodes requiring deeper reasoning
+($0.75/$4.50 per 1M tokens). Reduces cost by ~75% vs running
+gpt-5.4-mini everywhere.
 
-### 3-Judge evaluation design
+---
 
-**J1 — Structural Judge**
-Generates rubrics from the task description automatically.
-Checks format compliance, length constraints, required fields, JSON validity.
+## APO — Tool-using Agent
+
+The Auto Prompt Optimizer is a **tool-using agent**, not a single LLM call.
+
+### The problem with a single LLM call
+
+Without tools, APO sees only a text summary of failures:
+
+```
+"The prompt failed because sentences were too long and 
+the tone was too robotic in some cases."
+```
+
+Vague. Unstructured. The LLM has to guess what to fix.
+
+### With tools, APO reasons before optimising
+
+```
+APO Agent starts
+  
+  "The failure summary mentions length issues.
+   Let me get the exact rubric data first."
+  → calls get_rubric_failures
+     Returns: J1 length compliance 2.1/5 in 7/10 cases
+              J2 robotic tone 2.8/5 in 4/10 cases
+  
+  "Length is the bigger issue. Let me find prompts
+   that solved this for similar tasks."
+  → calls search_prompt_history
+     query="prompt that enforces 8-13 word length constraint"
+     Returns: 2 passing prompts from previous iterations
+              showing how explicit word count enforcement worked
+
+  → DONE
+  → writes prompt v2 using retrieved context
+```
+
+### Tools available
+
+| Tool | When APO calls it | What it returns |
+|---|---|---|
+| `search_prompt_history` | Structural failures — needs reference examples | Similar passing prompts from ChromaDB vector store |
+| `get_rubric_failures` | Vague failure summary — needs precise data | Per-rubric scores, fail counts, worst test cases |
+
+### Agent loop
+
+```
+Observe → failure analysis + score history
+Orient  → call tools (max 4 calls per iteration)
+Decide  → DONE
+Act     → write optimised prompt using retrieved context
+```
+
+Fallback: if agent loop produces no valid prompt,
+single-call APO runs as safety net.
+
+### Why this is agentic
+
+The agent **decides** which tools to call based on what it reads
+in the failure analysis. It doesn't follow a fixed sequence.
+Two different failures → two different tool call patterns →
+two different optimisation strategies. That's agency.
+
+**What this is NOT:** A multi-agent system. There is one agent
+(APO), one LangGraph graph, and one state object. Other nodes
+are deterministic functions. This is positioned accurately as
+a tool-using agent inside a workflow — not overclaimed as
+a multi-agent system.
+
+---
+
+## 3-Judge Evaluation Design
+
+**J1 — Structural Judge (gpt-5.4-nano)**
+Auto-generates rubrics from the task description.
+Checks: format compliance, length constraints, required fields,
+JSON validity. Scores 1–5 per rubric, integers only.
+
+**J2 — Qualitative Judge (gpt-5.4-nano)**
+Auto-generates qualitative rubrics Python tests cannot detect.
+Checks: tone, linguistic quality, contextual fidelity, naturalness.
 Scores 1–5 per rubric, integers only.
 
-**J2 — Qualitative Judge**
-Generates qualitative rubrics that Python tests cannot detect.
-Checks tone, linguistic quality, contextual fidelity, human naturalness.
-Scores 1–5 per rubric, integers only.
-
-**Boss**
-Synthesises J1 and J2 with expert weighting per task.
-Produces a float final score 1.0–5.0 with confidence rating.
+**Boss (gpt-5.4-mini)**
+Synthesises J1 + J2 with expert weighting per task type.
+Produces float score 1.0–5.0 with confidence rating.
 This is the pass/fail metric. Threshold: 4.0/5 (configurable).
 
 All three judges run N times per test case (default: 3).
-Scores are averaged across runs for statistical stability.
+Scores averaged across runs for statistical stability.
 
-### Hypothesis testing
+---
+
+## Hypothesis Testing
 
 After the final iteration, the system automatically selects
-the appropriate statistical test:
+the appropriate statistical test based on score distribution:
 
-- **Wilcoxon signed-rank test** — when score differences are symmetric (|skewness| < 1.0)
-- **Permutation test** — when differences are not symmetric
+**Wilcoxon signed-rank test** — when score differences are
+symmetric (|skewness| < 1.0). Non-parametric — no normality
+assumption required.
 
-Both tests compare the optimised prompt's Boss scores against
+**Permutation test** — when differences are not symmetric.
+10,000 permutations, two-tailed. More conservative.
+
+Both compare the optimised prompt's Boss scores against
 the baseline across all test cases × all runs.
 
 Migration threshold: p < 0.05.
 
 ---
 
-## Project structure
+## Project Structure
 
 ```
 prompt-engineering-pipeline/
 ├── src/
 │   ├── agents/
 │   │   ├── apg.py              # Auto Prompt Generator
-│   │   ├── apo.py              # Auto Prompt Optimizer (gpt-4o)
-│   │   └── test_runner.py      # Baseline + target output generation
+│   │   ├── apo.py              # APO tool-using agent loop
+│   │   ├── tools.py            # search_prompt_history + get_rubric_failures
+│   │   ├── test_runner.py      # Baseline + target output generation
+│   │   └── router.py           # Pass/fail routing logic
 │   ├── evaluation/
 │   │   ├── judge1.py           # Structural judge (J1)
 │   │   ├── judge2.py           # Qualitative judge (J2)
@@ -185,9 +282,9 @@ prompt-engineering-pipeline/
 │   ├── pipeline.py             # LangGraph graph assembly
 │   └── main.py                 # CLI entry point
 ├── configs/
-│   ├── improve_work_history.json   # Resume bullet paraphrasing
-│   └── grammar_correction.json    # Grammar and punctuation correction
-├── results/                    # Pipeline run outputs (JSON)
+│   ├── improve_work_history.json
+│   └── grammar_correction.json
+├── results/
 ├── .env.example
 ├── requirements.txt
 └── README.md
@@ -195,7 +292,7 @@ prompt-engineering-pipeline/
 
 ---
 
-## Quick start
+## Quick Start
 
 ### 1. Clone and install
 
@@ -209,12 +306,14 @@ pip install -r requirements.txt
 
 ```bash
 cp .env.example .env
-# Add your OpenAI API key to .env
 ```
 
 `.env`:
 ```
 OPENAI_API_KEY=your_key_here
+JUDGE_MODEL=gpt-5.4-nano
+APO_MODEL=gpt-5.4-mini
+BOSS_MODEL=gpt-5.4-mini
 ```
 
 ### 3. Run with an example config
@@ -223,7 +322,7 @@ OPENAI_API_KEY=your_key_here
 # Resume bullet improvement task
 python -m src.main --config configs/improve_work_history.json
 
-# Non-interactive mode (auto-approves at human checkpoint)
+# Non-interactive (auto-approves at human checkpoint)
 python -m src.main --config configs/improve_work_history.json --non-interactive
 
 # Grammar correction task
@@ -231,8 +330,6 @@ python -m src.main --config configs/grammar_correction.json --non-interactive
 ```
 
 ### 4. Bring your own task
-
-Create `configs/my_task.json`:
 
 ```json
 {
@@ -252,7 +349,7 @@ python -m src.main --config configs/my_task.json
 
 ---
 
-## Config reference
+## Config Reference
 
 | Field | Type | Default | Description |
 |---|---|---|---|
@@ -260,18 +357,18 @@ python -m src.main --config configs/my_task.json
 | `task_description` | string | required | What the model must do |
 | `output_spec` | string | required | Exact output format / schema |
 | `output_is_json` | bool | true | Enables JSON validity pre-check in J1 |
-| `num_runs` | int | 3 | Judge runs per test case (more = more stable) |
+| `num_runs` | int | 3 | Judge runs per test case |
 | `pass_threshold` | float | 4.0 | Boss score required to pass (1–5) |
 | `max_iterations` | int | 3 | Max APO iterations before stopping |
 | `input_texts` | list | [] | Optional: provide your own test inputs |
 | `source_outputs` | list | [] | Optional: provide your own baseline outputs |
-| `human_feedback` | string | null | Optional: seed the first APG with feedback |
+| `human_feedback` | string | null | Optional: seed APG with prior observations |
 
 ---
 
 ## Output
 
-Each run saves a JSON result file to `results/`:
+Each run saves to `results/`:
 
 ```json
 {
@@ -298,59 +395,62 @@ Each run saves a JSON result file to `results/`:
 
 ---
 
-## Cost estimate
+## Cost Estimate
 
 Approximate cost per pipeline run (3 iterations, 10 test cases, 3 runs):
 
-| Component | Model | Approx cost |
+| Component | Model | Pricing | Approx cost |
+|---|---|---|---|
+| APG + test case gen | gpt-5.4-nano | $0.20/$1.25 per 1M | ~$0.01 |
+| 3× TestRunner (30 calls) | gpt-5.4-nano | $0.20/$1.25 per 1M | ~$0.02 |
+| 3× J1 (90 calls) | gpt-5.4-nano | $0.20/$1.25 per 1M | ~$0.03 |
+| 3× J2 (90 calls) | gpt-5.4-nano | $0.20/$1.25 per 1M | ~$0.04 |
+| 3× Boss (90 calls) | gpt-5.4-mini | $0.75/$4.50 per 1M | ~$0.35 |
+| 3× APO Agent | gpt-5.4-mini | $0.75/$4.50 per 1M | ~$0.18 |
+| Hypothesis + failure summary | gpt-5.4-mini | $0.75/$4.50 per 1M | ~$0.04 |
+| **Total** | | | **~$0.67** |
+
+Cost logged per run in results JSON and terminal summary.
+
+---
+
+## Why Not DSPy?
+
+DSPy's optimisers (MIPRO, BootstrapFewShot) select the best
+few-shot examples for a fixed prompt template.
+
+This system solves a different problem: constructing a prompt
+from scratch and iteratively improving it based on structured
+failure analysis from a 3-judge framework.
+
+| Dimension | DSPy | APG + APO |
 |---|---|---|
-| APG + test case gen | gpt-4o-mini | ~$0.02 |
-| 3× TestRunner (30 calls) | gpt-4o-mini | ~$0.05 |
-| 3× J1 (90 calls) | gpt-4o-mini | ~$0.08 |
-| 3× J2 (90 calls) | gpt-4o-mini | ~$0.10 |
-| 3× Boss (90 calls) | gpt-4o | ~$0.45 |
-| 3× APO | gpt-4o | ~$0.12 |
-| Hypothesis + failure summary | gpt-4o | ~$0.04 |
-| **Total** | | **~$0.86** |
+| What it optimises | Example selection | Full prompt construction |
+| Failure signal | Single metric | J1 + J2 + Boss (3 dimensions) |
+| Tool use | No | Yes (ChromaDB + rubric data) |
+| Statistical validation | No | Wilcoxon / permutation test |
+| Output | Best few-shot config | Production-ready prompt |
 
-Cost is logged per run in the results JSON and printed in the terminal summary.
+On structured writing-help tasks: APG/APO wins.
+On classification/retrieval with few-shot examples: DSPy wins.
 
 ---
 
-## Why not DSPy?
+## Production Context
 
-DSPy's optimisers (MIPRO, BootstrapFewShot) are powerful for
-*selecting* the best few-shot examples for a fixed prompt template.
+This is a public implementation of the prompt engineering automation
+system built at [BOLD](https://www.bold.com/) for writing-help
+workloads — resume bullets, grammar correction, work history
+improvement, cover letters.
 
-This system solves a different problem: *constructing* a production-grade
-prompt from scratch and iteratively improving it based on structured failure analysis.
+In production: BOLD's internal LLM gateway, proprietary writing data,
+proprietary evaluation test cases.
 
-On structured writing-help tasks (resume bullets, grammar correction),
-the APG/APO approach outperforms DSPy because:
+This public version: OpenAI directly, generated test cases,
+same architecture and evaluation framework.
 
-1. APG generates the full prompt structure, not just examples
-2. The 3-judge framework gives richer failure signal than single-metric scoring
-3. APO uses the full failure analysis as context — not just score deltas
-4. The system handles both JSON and plain-text output tasks natively
-
-DSPy remains the better choice for classification, retrieval, and
-tasks where few-shot example selection is the primary lever.
-
----
-
-## Production context
-
-This project is a clean, public implementation of the prompt engineering
-automation system built at [BOLD](https://www.bold.com/) for writing-help
-workloads (resume bullets, grammar correction, work history improvement,
-cover letters).
-
-In production, the system uses BOLD's internal LLM gateway and proprietary
-writing data. This public version uses OpenAI directly with generated test
-cases, preserving the full architecture and evaluation framework.
-
-**Impact:** Reduced prompt engineering cycle from 3 days (manual) to
-under 1 hour (automated) across multiple writing-help use cases.
+**Impact:** Reduced prompt engineering cycle from 3 days (manual)
+to under 1 hour (automated) across multiple writing-help use cases.
 
 ---
 
@@ -363,6 +463,8 @@ langgraph>=0.1.0
 pydantic>=2.0.0
 scipy>=1.13.0
 numpy>=1.26.0
+chromadb>=0.5.0
+sentence-transformers>=2.7.0
 ```
 
 ---
@@ -372,11 +474,12 @@ numpy>=1.26.0
 **Sudhanshu Sekhar Biswal**
 Senior AI Engineer · Patent Holder · CII National AI Award Winner
 
-[GitHub](https://github.com/Sudhanshu-Biswal) · [LinkedIn](https://linkedin.com/in/sudhanshubiswal)
+[GitHub](https://github.com/Sudhanshu-Biswal) ·
+[LinkedIn](https://linkedin.com/in/sudhanshubiswal)
 
 ---
 
 *Part of a 3-project portfolio demonstrating production GenAI engineering:*
 - *[Career Intelligence RAG](https://github.com/Sudhanshu-Biswal/career-intelligence-rag) — HyDE + hybrid retrieval + RAGAS evaluation*
-- *[Qwen3.5 Fine-tuning](https://github.com/Sudhanshu-Biswal/resume-llm-finetuning) — QLoRA fine-tuning for writing-help tasks*
+- *[Resume Writing LLM Fine-tuning](https://github.com/Sudhanshu-Biswal/resume-llm-finetuning) — QLoRA fine-tuning for writing-help tasks*
 - **Automated Prompt Engineering Pipeline — this repo**

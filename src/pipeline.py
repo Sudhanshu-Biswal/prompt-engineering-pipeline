@@ -120,6 +120,26 @@ def node_evaluator(state: PipelineState) -> PipelineState:
         "final_score":  avg_boss if passed else state.final_score,
         "_test_results": None,   # clear from state
     })
+    # ── Index prompt for APO tool search ─────────────────────────────────────
+    # After every iteration, index the prompt and its score
+    # so future APO calls can search for passing examples
+    from src.agents.tools import index_prompt
+    index_prompt(
+        prompt=state.current_prompt,
+        task_name=state.task_name,
+        task_type=state.task_name,
+        iteration=state.iteration,
+        boss_score=avg_boss,
+        passed=passed,
+    )
+
+    return state.model_copy(update={
+        "history":       updated_history,
+        "passed":        passed,
+        "final_prompt":  state.current_prompt if passed else state.final_prompt,
+        "final_score":   avg_boss if passed else state.final_score,
+        "_test_results": None,
+    })
 
 
 def node_apo(state: PipelineState) -> PipelineState:
